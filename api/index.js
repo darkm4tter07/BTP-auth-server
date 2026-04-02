@@ -1,9 +1,11 @@
 import express from 'express';
+import serverless from "serverless-http";
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { env } from '../src/config/env.js';
 import authRoutes from '../src/routes/auth.js';
 import fitnessRoutes from '../src/routes/fitness.js';
+
 
 const app = express();
 
@@ -27,4 +29,4 @@ app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 //     process.exit(1);
 //   });
 
-export default app;
+export default serverless(app);
