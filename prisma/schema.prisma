@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model alembic_version {
+  version_num String @id(map: "alembic_version_pkc") @db.VarChar(32)
+}
+
+model fitness_connections {
+  id             String    @id @db.Uuid
+  user_id        String    @unique(map: "ix_fitness_connections_user_id") @db.Uuid
+  access_token   String
+  refresh_token  String
+  token_expiry   DateTime  @db.Timestamptz(6)
+  scopes         Json?
+  connected_at   DateTime? @default(now()) @db.Timestamptz(6)
+  last_synced_at DateTime? @db.Timestamptz(6)
+  is_active      Boolean?
+  users          users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model fitness_data {
+  id                 String    @id @db.Uuid
+  user_id            String    @db.Uuid
+  date               DateTime  @db.Date
+  steps              Int?
+  distance_meters    Float?
+  calories           Int?
+  active_minutes     Int?
+  heart_rate_avg     Int?
+  heart_rate_max     Int?
+  heart_rate_resting Int?
+  sleep_hours        Float?
+  sync_timestamp     DateTime? @default(now()) @db.Timestamptz(6)
+  users              users     @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, date], map: "unique_user_date")
+  @@index([date], map: "ix_fitness_data_date")
+  @@index([user_id], map: "ix_fitness_data_user_id")
+}
+
+model users {
+  id                  String               @id @db.Uuid
+  email               String               @unique(map: "ix_users_email") @db.VarChar(255)
+  full_name           String               @db.VarChar(255)
+  role                userrole
+  employee_id         String?              @unique @db.VarChar(50)
+  phone_number        String?              @db.VarChar(20)
+  google_id           String               @unique @db.VarChar(255)
+  profile_picture     String?              @db.VarChar(500)
+  is_active           Boolean?
+  created_at          DateTime?            @default(now()) @db.Timestamptz(6)
+  updated_at          DateTime?            @default(now()) @db.Timestamptz(6)
+  fitness_connections fitness_connections?
+  fitness_data        fitness_data[]
+}
+
+enum userrole {
+  ADMIN
+  WORKER
+}

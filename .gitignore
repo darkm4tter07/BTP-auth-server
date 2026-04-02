@@ -1,0 +1,44 @@
+# dependencies
+node_modules/
+
+# environment variables and secrets
+.env
+.env.*
+!.env.example
+
+# logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# runtime data
+pids/
+*.pid
+*.pid.lock
+
+# coverage and test output
+coverage/
+.nyc_output/
+
+# build output
+dist/
+build/
+
+# caches
+.cache/
+.eslintcache
+
+# prisma/sqlite local databases
+prisma/*.db
+prisma/*.db-journal
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# editor/IDE
+.vscode/
+.idea/
