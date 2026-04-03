@@ -13,9 +13,9 @@ app.use(cors({ origin: env.FRONTEND_URL, credentials: true }));
 app.use(express.json());
 app.use(cookieParser());
 
-app.use('/auth', authRoutes);
-app.use('/fitness', fitnessRoutes);
-app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+app.use('api/auth', authRoutes);
+app.use('api/fitness', fitnessRoutes);
+app.get('api/health', (_req, res) => res.json({ status: 'ok' }));
 
 // app.listen(env.PORT, () => {
 //   console.log(`Auth server running on port ${env.PORT}`);
