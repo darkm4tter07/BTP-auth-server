@@ -24,6 +24,16 @@ function createOAuthClient() {
   );
 }
 
+// Add this function at the top of the file after imports
+function generateEmployeeId() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let result = 'WRK-';
+  for (let i = 0; i < 5; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
 // GET /auth/google/login
 router.get('/google/login', (req, res) => {
   const client = createOAuthClient();
@@ -73,6 +83,16 @@ router.get('/google/callback', async (req, res) => {
         },
       });
     } else {
+
+      let employeeId;
+      let isUnique = false;
+      while (!isUnique) {
+        employeeId = generateEmployeeId();
+        const existing = await prisma.users.findFirst({
+          where: { employee_id: employeeId }
+        });
+        isUnique = !existing;
+      }
       user = await prisma.users.create({
         data: {
           id: crypto.randomUUID(),
@@ -82,6 +102,7 @@ router.get('/google/callback', async (req, res) => {
           profile_picture: picture,
           role: 'WORKER',
           is_active: true,
+          employee_id: employeeId, 
         },
       });
     }
