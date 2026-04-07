@@ -196,9 +196,7 @@ router.get('/connected-workers', requireAdmin, async (req, res) => {
     const workers = await prisma.users.findMany({
       where: {
         role: 'WORKER',
-        fitness_connections: {
-          isNot: null,
-        },
+        fitness_connections: { is_active: true },
       },
       include: { fitness_connections: true },
     });
