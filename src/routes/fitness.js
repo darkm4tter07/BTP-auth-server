@@ -6,7 +6,7 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
 
-function createFitnessClient(accessToken, refreshToken) {
+function createFitnessClient(accessToken, refreshToken, userId) {
   const client = new google.auth.OAuth2(
     env.GOOGLE_CLIENT_ID,
     env.GOOGLE_CLIENT_SECRET,
@@ -16,6 +16,23 @@ function createFitnessClient(accessToken, refreshToken) {
     access_token: accessToken,
     refresh_token: refreshToken,
   });
+
+  client.on('tokens', async (tokens) => {
+    console.log('Token refreshed for user:', userId);
+    if (tokens.access_token) {
+      await prisma.fitness_connections.updateMany({
+        where: { user_id: userId },
+        data: {
+          access_token: tokens.access_token,
+          token_expiry: tokens.expiry_date
+            ? new Date(tokens.expiry_date)
+            : new Date(Date.now() + 3600 * 1000),
+        },
+      });
+      console.log('New token saved to DB');
+    }
+  });
+
   return client;
 }
 
@@ -25,7 +42,35 @@ async function syncUserFitness(userId) {
   });
   if (!conn) return null;
 
-  const auth = createFitnessClient(conn.access_token, conn.refresh_token);
+  const auth = createFitnessClient(conn.access_token, conn.refresh_token, userId);
+
+  // Proactive refresh — refresh if expiring within 5 minutes
+  const fiveMinutesFromNow = new Date(Date.now() + 5 * 60 * 1000);
+  if (new Date(conn.token_expiry) < fiveMinutesFromNow) {
+    try {
+      const { credentials } = await auth.refreshAccessToken();
+      await prisma.fitness_connections.updateMany({
+        where: { user_id: userId },
+        data: {
+          access_token: credentials.access_token,
+          token_expiry: credentials.expiry_date
+            ? new Date(credentials.expiry_date)
+            : new Date(Date.now() + 3600 * 1000),
+        },
+      });
+      auth.setCredentials(credentials);
+    } catch (err) {
+        console.error('Token refresh failed:', err.message);
+
+        await prisma.fitness_connections.updateMany({
+          where: { user_id: userId },
+          data: { is_active: false }  // mark as invalid
+        });
+
+        return { needs_reauth: true };
+      }
+  }
+
   const fitness = google.fitness({ version: 'v1', auth });
 
   const now = Date.now();
@@ -44,7 +89,15 @@ async function syncUserFitness(userId) {
       datasetId,
     });
     steps = stepsRes.data.point?.reduce((sum, p) => sum + (p.value[0].intVal || 0), 0) || 0;
-  } catch (_) {}
+  } catch (err) {
+    if (err?.code === 401) {
+      await prisma.fitness_connections.updateMany({
+        where: { user_id: userId },
+        data: { is_active: false },
+      });
+      return { needs_reauth: true };
+    }
+  }
 
   try {
     const heartRes = await fitness.users.dataSources.datasets.get({
@@ -54,7 +107,15 @@ async function syncUserFitness(userId) {
     });
     const rates = heartRes.data.point?.map(p => p.value[0].fpVal) || [];
     heartRateAvg = rates.length ? Math.round(rates.reduce((a, b) => a + b) / rates.length) : 0;
-  } catch (_) {}
+  } catch (err) {
+    if (err?.code === 401) {
+      await prisma.fitness_connections.updateMany({
+        where: { user_id: userId },
+        data: { is_active: false },
+      });
+      return { needs_reauth: true };
+    }
+  }
 
   try {
     const calRes = await fitness.users.dataSources.datasets.get({
@@ -63,7 +124,15 @@ async function syncUserFitness(userId) {
       datasetId,
     });
     calories = Math.round(calRes.data.point?.reduce((sum, p) => sum + (p.value[0].fpVal || 0), 0) || 0);
-  } catch (_) {}
+  } catch (err) {
+    if (err?.code === 401) {
+      await prisma.fitness_connections.updateMany({
+        where: { user_id: userId },
+        data: { is_active: false },
+      });
+      return { needs_reauth: true };
+    }
+  }
 
   // Upsert today's fitness data
   const today = new Date();
@@ -73,13 +142,14 @@ async function syncUserFitness(userId) {
     where: { user_id: userId, date: today },
   });
 
+  let result;
   if (existing) {
-    return prisma.fitness_data.update({
+    result = await prisma.fitness_data.update({
       where: { id: existing.id },
       data: { steps, heart_rate_avg: heartRateAvg, calories, sync_timestamp: new Date() },
     });
   } else {
-    return prisma.fitness_data.create({
+    result = await prisma.fitness_data.create({
       data: {
         id: crypto.randomUUID(),
         user_id: userId,
@@ -90,6 +160,14 @@ async function syncUserFitness(userId) {
       },
     });
   }
+
+  // Update last_synced_at
+  await prisma.fitness_connections.updateMany({
+    where: { user_id: userId },
+    data: { last_synced_at: new Date() },
+  });
+
+  return result;
 }
 
 // GET /fitness/summary
@@ -118,7 +196,9 @@ router.get('/connected-workers', requireAdmin, async (req, res) => {
     const workers = await prisma.users.findMany({
       where: {
         role: 'WORKER',
-        fitness_connections: { is_active: true },
+        fitness_connections: {
+          isNot: null,
+        },
       },
       include: { fitness_connections: true },
     });
@@ -127,7 +207,7 @@ router.get('/connected-workers', requireAdmin, async (req, res) => {
     today.setHours(0, 0, 0, 0);
 
     const results = await Promise.all(workers.map(async (worker) => {
-      await syncUserFitness(worker.id);
+      const syncResult = await syncUserFitness(worker.id);
       const data = await prisma.fitness_data.findFirst({
         where: { user_id: worker.id, date: today },
       });
@@ -139,6 +219,9 @@ router.get('/connected-workers', requireAdmin, async (req, res) => {
         employee_id: worker.employee_id,
         connected_at: worker.fitness_connections?.connected_at || null,
         last_synced_at: worker.fitness_connections?.last_synced_at || null,
+        needs_reauth:
+          syncResult?.needs_reauth === true ||
+          worker.fitness_connections?.is_active === false,
         steps: data?.steps || 0,
         heart_rate: data?.heart_rate_avg || 0,
         calories: data?.calories || 0,
@@ -196,5 +279,26 @@ router.get('/users/:userId', requireAdmin, async (req, res) => {
     res.status(500).json({ detail: err.message });
   }
 });
+
+// GET /fitness/token-status (admin only)
+// router.get('/token-status', requireAdmin, async (req, res) => {
+//   const connections = await prisma.fitness_connections.findMany({
+//     where: { is_active: true },
+//     include: { users: true },
+//   });
+
+//   const status = connections.map(conn => ({
+//     worker_name: conn.users.full_name,
+//     worker_id: conn.user_id,
+//     last_synced_at: conn.last_synced_at,
+//     is_active: conn.is_active,
+//     // Only flag if last sync was more than 24 hours ago
+//     needs_reauth: conn.last_synced_at 
+//       ? (new Date() - new Date(conn.last_synced_at)) > 24 * 60 * 60 * 1000
+//       : true,
+//   }));
+
+//   res.json(status);
+// });
 
 export default router
