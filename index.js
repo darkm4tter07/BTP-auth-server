@@ -5,6 +5,7 @@ import { env } from './src/config/env.js';
 import prisma from './src/lib/prisma.js';
 import authRoutes from './src/routes/auth.js';
 import fitnessRoutes from './src/routes/fitness.js';
+import profileRoutes from './src/routes/profile.js';
 
 const app = express();
 
@@ -14,6 +15,7 @@ app.use(cookieParser());
 
 app.use('/auth', authRoutes);
 app.use('/fitness', fitnessRoutes);
+app.use('/profile', profileRoutes);
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
 app.listen(env.PORT, () => {

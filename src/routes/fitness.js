@@ -258,6 +258,8 @@ router.get('/summary/:userId', requireAdmin, async (req, res) => {
   }
 });
 
+
+//to be deleted as included in the profile routes
 // GET /fitness/users/:userId
 router.get('/users/:userId', requireAdmin, async (req, res) => {
   try {
@@ -277,26 +279,5 @@ router.get('/users/:userId', requireAdmin, async (req, res) => {
     res.status(500).json({ detail: err.message });
   }
 });
-
-// GET /fitness/token-status (admin only)
-// router.get('/token-status', requireAdmin, async (req, res) => {
-//   const connections = await prisma.fitness_connections.findMany({
-//     where: { is_active: true },
-//     include: { users: true },
-//   });
-
-//   const status = connections.map(conn => ({
-//     worker_name: conn.users.full_name,
-//     worker_id: conn.user_id,
-//     last_synced_at: conn.last_synced_at,
-//     is_active: conn.is_active,
-//     // Only flag if last sync was more than 24 hours ago
-//     needs_reauth: conn.last_synced_at 
-//       ? (new Date() - new Date(conn.last_synced_at)) > 24 * 60 * 60 * 1000
-//       : true,
-//   }));
-
-//   res.json(status);
-// });
 
 export default router

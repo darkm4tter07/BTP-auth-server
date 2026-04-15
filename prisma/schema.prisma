@@ -44,22 +44,110 @@ model fitness_data {
 }
 
 model users {
-  id                  String               @id @db.Uuid
-  email               String               @unique(map: "ix_users_email") @db.VarChar(255)
-  full_name           String               @db.VarChar(255)
-  role                userrole
-  employee_id         String?              @unique @db.VarChar(50)
-  phone_number        String?              @db.VarChar(20)
-  google_id           String               @unique @db.VarChar(255)
-  profile_picture     String?              @db.VarChar(500)
-  is_active           Boolean?
-  created_at          DateTime?            @default(now()) @db.Timestamptz(6)
-  updated_at          DateTime?            @default(now()) @db.Timestamptz(6)
-  fitness_connections fitness_connections?
-  fitness_data        fitness_data[]
+  id                    String                  @id @db.Uuid
+  email                 String                  @unique(map: "ix_users_email") @db.VarChar(255)
+  full_name             String                  @db.VarChar(255)
+  role                  userrole
+  employee_id           String?                 @unique @db.VarChar(50)
+  phone_number          String?                 @db.VarChar(20)
+  google_id             String                  @unique @db.VarChar(255)
+  profile_picture       String?                 @db.VarChar(500)
+  is_active             Boolean?
+  created_at            DateTime?               @default(now()) @db.Timestamptz(6)
+  updated_at            DateTime?               @default(now()) @db.Timestamptz(6)
+  cognitive_assessments cognitive_assessments[]
+  fitness_connections   fitness_connections?
+  fitness_data          fitness_data[]
+  worker_profiles       worker_profiles?
+}
+
+model cognitive_assessments {
+  id               String          @id @db.Uuid
+  user_id          String          @db.Uuid
+  score            Int
+  reaction_time_ms Float?
+  memory_score     Int?
+  attention_score  Int?
+  spatial_score    Int?
+  knowledge_score  Int?
+  answers          Json?
+  result           cognitiveresult
+  taken_at         DateTime?       @default(now()) @db.Timestamptz(6)
+  valid_until      DateTime?       @db.Timestamptz(6)
+  users            users           @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([user_id], map: "ix_cognitive_assessments_user_id")
+}
+
+model worker_profiles {
+  id                         String        @id @db.Uuid
+  user_id                    String        @unique(map: "ix_worker_profiles_user_id") @db.Uuid
+  gender                     gender?
+  age                        Int?
+  height_cm                  Float?
+  weight_kg                  Float?
+  blood_group                bloodgroup?
+  dominant_hand              dominanthand?
+  identification_mark        String?       @db.VarChar(255)
+  profile_photo_url          String?       @db.VarChar(500)
+  major_illness              String?
+  disability                 String?
+  known_allergies            String?
+  medications                String?
+  last_medical_checkup       DateTime?     @db.Date
+  fitness_status             fitnessstatus
+  designation                String?       @db.VarChar(100)
+  experience_years           Float?
+  zone_assignment            String?       @db.VarChar(100)
+  certifications             Json?
+  date_joined                DateTime?     @db.Date
+  emergency_contact_name     String?       @db.VarChar(255)
+  emergency_contact_phone    String?       @db.VarChar(20)
+  emergency_contact_relation String?       @db.VarChar(50)
+  created_at                 DateTime?     @default(now()) @db.Timestamptz(6)
+  updated_at                 DateTime?     @default(now()) @db.Timestamptz(6)
+  users                      users         @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
 enum userrole {
   ADMIN
   WORKER
+}
+
+enum bloodgroup {
+  A_POS
+  A_NEG
+  B_POS
+  B_NEG
+  AB_POS
+  AB_NEG
+  O_POS
+  O_NEG
+  UNKNOWN
+}
+
+enum cognitiveresult {
+  FIT
+  SUPERVISION_REQUIRED
+  UNFIT
+}
+
+enum dominanthand {
+  LEFT
+  RIGHT
+  AMBIDEXTROUS
+}
+
+enum fitnessstatus {
+  CLEARED
+  RESTRICTED
+  UNFIT
+  PENDING
+}
+
+enum gender {
+  MALE
+  FEMALE
+  OTHER
+  PREFER_NOT_TO_SAY
 }
